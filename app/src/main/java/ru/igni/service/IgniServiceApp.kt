@@ -5,14 +5,17 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
@@ -22,6 +25,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,7 +38,16 @@ private const val MAX_COAL_CHANGES = 4
 private const val PREFS = "igni_service_state"
 
 private data class HallTable(val physical: Int, val zone: String, val defaultNumber: Int = physical)
-private data class TableSpec(val physical: Int, val x: Float, val y: Float, val w: Float, val h: Float, val round: Boolean = false)
+private enum class TableShape { ROUND, RECT, WIDE }
+private data class TableSpec(
+    val physical: Int,
+    val x: Float,
+    val y: Float,
+    val w: Float,
+    val h: Float,
+    val shape: TableShape,
+    val rotation: Float = 0f
+)
 private data class HookahSession(
     val type: String,
     val createdAt: Long,
@@ -53,32 +66,32 @@ private val verandaTables = (301..308).map { HallTable(it, "Летняя вер�
 private val allTables = mainTables + verandaTables
 
 private val mainSpecs = listOf(
-    TableSpec(101, .18f, .10f, .10f, .15f, true),
-    TableSpec(102, .34f, .10f, .10f, .15f, true),
-    TableSpec(103, .50f, .10f, .10f, .15f, true),
-    TableSpec(104, .66f, .10f, .10f, .15f, true),
-    TableSpec(105, .20f, .34f, .12f, .17f),
-    TableSpec(106, .38f, .34f, .12f, .17f),
-    TableSpec(107, .56f, .34f, .12f, .17f),
-    TableSpec(108, .74f, .34f, .12f, .17f),
-    TableSpec(109, .18f, .60f, .10f, .15f, true),
-    TableSpec(110, .34f, .60f, .10f, .15f, true),
-    TableSpec(111, .50f, .60f, .10f, .15f, true),
-    TableSpec(112, .66f, .60f, .10f, .15f, true),
-    TableSpec(113, .80f, .12f, .11f, .17f),
-    TableSpec(114, .80f, .62f, .11f, .17f),
-    TableSpec(77, .03f, .70f, .16f, .20f)
+    TableSpec(77, .055f, .775f, .16f, .17f, TableShape.WIDE),
+    TableSpec(101, .27f, .08f, .095f, .14f, TableShape.ROUND),
+    TableSpec(102, .46f, .06f, .075f, .20f, TableShape.RECT),
+    TableSpec(103, .62f, .06f, .075f, .20f, TableShape.RECT),
+    TableSpec(104, .79f, .06f, .075f, .20f, TableShape.RECT),
+    TableSpec(105, .39f, .34f, .075f, .22f, TableShape.RECT),
+    TableSpec(106, .55f, .34f, .075f, .22f, TableShape.RECT),
+    TableSpec(107, .72f, .34f, .075f, .22f, TableShape.RECT),
+    TableSpec(108, .38f, .64f, .075f, .21f, TableShape.RECT),
+    TableSpec(109, .53f, .68f, .16f, .12f, TableShape.WIDE),
+    TableSpec(110, .76f, .65f, .075f, .21f, TableShape.RECT),
+    TableSpec(111, .25f, .58f, .075f, .12f, TableShape.ROUND),
+    TableSpec(112, .20f, .47f, .075f, .12f, TableShape.ROUND),
+    TableSpec(113, .04f, .39f, .14f, .12f, TableShape.WIDE),
+    TableSpec(114, .04f, .59f, .14f, .12f, TableShape.WIDE)
 )
 
 private val verandaSpecs = listOf(
-    TableSpec(301, .10f, .18f, .11f, .19f),
-    TableSpec(302, .30f, .18f, .11f, .19f),
-    TableSpec(303, .50f, .18f, .11f, .19f),
-    TableSpec(304, .70f, .18f, .11f, .19f),
-    TableSpec(305, .10f, .57f, .11f, .19f),
-    TableSpec(306, .30f, .57f, .11f, .19f),
-    TableSpec(307, .50f, .57f, .11f, .19f),
-    TableSpec(308, .70f, .57f, .11f, .19f)
+    TableSpec(301, .085f, .20f, .16f, .16f, TableShape.WIDE, -42f),
+    TableSpec(302, .31f, .16f, .11f, .13f, TableShape.ROUND),
+    TableSpec(303, .49f, .16f, .11f, .13f, TableShape.ROUND),
+    TableSpec(304, .67f, .16f, .11f, .13f, TableShape.ROUND),
+    TableSpec(305, .83f, .16f, .11f, .13f, TableShape.ROUND),
+    TableSpec(306, .32f, .62f, .09f, .23f, TableShape.RECT),
+    TableSpec(307, .53f, .60f, .09f, .23f, TableShape.RECT),
+    TableSpec(308, .75f, .61f, .09f, .23f, TableShape.RECT)
 )
 
 private class ServiceState(context: Context) {
@@ -283,9 +296,22 @@ private fun ServiceScreen(state: ServiceState) {
                     else OutlinedButton(onClick = { zone = "Летняя веранда" }) { Text("Летняя веранда") }
                 }
                 Spacer(Modifier.height(10.dp))
-                Card(Modifier.fillMaxSize(), colors = CardDefaults.cardColors(containerColor = Color(0xFF151411))) {
+                Card(
+                    Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111315)),
+                    border = BorderStroke(1.dp, Color(0xFF4A3924))
+                ) {
                     BoxWithConstraints(Modifier.fillMaxSize().padding(10.dp)) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF17191B), RoundedCornerShape(14.dp))
+                                .border(1.dp, Color(0xFF73552D), RoundedCornerShape(14.dp))
+                        )
                         val specs = if (zone == "Основной зал") mainSpecs else verandaSpecs
+                        if (zone == "Основной зал") MainHallDecor(maxWidth, maxHeight)
+                        else VerandaDecor(maxWidth, maxHeight)
                         specs.forEach { spec ->
                             val session = state.sessions[spec.physical]
                             val display = state.displayNumber(spec.physical)
@@ -308,12 +334,21 @@ private fun ServiceScreen(state: ServiceState) {
                                     .offset(maxWidth * spec.x, maxHeight * spec.y)
                                     .width(maxWidth * spec.w)
                                     .height(maxHeight * spec.h)
+                                    .graphicsLayer { rotationZ = spec.rotation }
                                     .clickable { selectedPhysical = spec.physical },
-                                shape = if (spec.round) CircleShape else RoundedCornerShape(12.dp),
+                                shape = when (spec.shape) {
+                                    TableShape.ROUND -> CircleShape
+                                    TableShape.RECT -> RoundedCornerShape(9.dp)
+                                    TableShape.WIDE -> RoundedCornerShape(14.dp)
+                                },
                                 colors = CardDefaults.cardColors(containerColor = color),
                                 border = BorderStroke(2.dp, border)
                             ) {
-                                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                Column(
+                                    Modifier.fillMaxSize().graphicsLayer { rotationZ = -spec.rotation },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
                                     Text(display.toString(), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                                     if (session != null) {
                                         Text("🔥 ${session.hookahs.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -322,38 +357,155 @@ private fun ServiceScreen(state: ServiceState) {
                                 }
                             }
                         }
-                        if (zone == "Основной зал") {
-                            Text("Барная зона", modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.primary)
-                        } else {
-                            Text("ВХОД", modifier = Modifier.align(Alignment.TopCenter).padding(8.dp), color = MaterialTheme.colorScheme.primary)
-                        }
                     }
                 }
             }
 
-            ActiveTablesPanel(
-                state = state,
-                now = now,
-                onOpen = { physical ->
-                    zone = allTables.firstOrNull { it.physical == physical }?.zone ?: zone
-                    selectedPhysical = physical
-                },
-                modifier = Modifier.width(300.dp).fillMaxHeight()
-            )
+            val activePhysical = selectedPhysical?.takeIf { state.sessions.containsKey(it) }
+            val activeSession = activePhysical?.let { state.sessions[it] }
+            if (activePhysical != null && activeSession != null) {
+                ActiveTablePanel(
+                    physical = activePhysical,
+                    displayNumber = state.displayNumber(activePhysical),
+                    session = activeSession,
+                    now = now,
+                    state = state,
+                    onClosePanel = { selectedPhysical = null },
+                    onMoved = { newPhysical ->
+                        zone = allTables.firstOrNull { it.physical == newPhysical }?.zone ?: zone
+                        selectedPhysical = newPhysical
+                    },
+                    modifier = Modifier.width(340.dp).fillMaxHeight()
+                )
+            } else {
+                ActiveTablesPanel(
+                    state = state,
+                    now = now,
+                    onOpen = { physical ->
+                        zone = allTables.firstOrNull { it.physical == physical }?.zone ?: zone
+                        selectedPhysical = physical
+                    },
+                    modifier = Modifier.width(340.dp).fillMaxHeight()
+                )
+            }
         }
     }
 
     selectedPhysical?.let { physical ->
         val session = state.sessions[physical]
-        TableDialog(
-            physical = physical,
-            displayNumber = state.displayNumber(physical),
-            session = session,
-            shiftOpen = state.shiftStartedAt > 0L,
-            now = now,
-            state = state,
-            onDismiss = { selectedPhysical = null }
+        if (session == null) {
+            FreeTableDialog(
+                physical = physical,
+                displayNumber = state.displayNumber(physical),
+                shiftOpen = state.shiftStartedAt > 0L,
+                state = state,
+                onDismiss = { selectedPhysical = null }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MainHallDecor(w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    DecorBlock("Хост", .025f, .045f, .105f, .225f, w, h)
+    DecorLabel("ВХОД", .205f, .025f, w, h)
+    DecorBlock("", .395f, .065f, .045f, .17f, w, h)
+    DecorLine(.015f, .305f, .255f, .012f, w, h)
+    DecorLine(.40f, .565f, .46f, .018f, w, h)
+    DecorBlock("VIP 77", .025f, .75f, .23f, .22f, w, h)
+    DecorDiamond("WC", .285f, .875f, .065f, .075f, w, h)
+    DecorBlock("Барная зона", .375f, .875f, .59f, .07f, w, h)
+    DecorPlant(.015f, .36f, w, h)
+    DecorPlant(.84f, .035f, w, h)
+    DecorPlant(.89f, .70f, w, h)
+    DecorPlant(.34f, .47f, w, h)
+}
+
+@Composable
+private fun VerandaDecor(w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    DecorLine(.02f, .018f, .96f, .05f, w, h)
+    DecorLine(.03f, .115f, .20f, .010f, w, h)
+    DecorLine(.30f, .115f, .25f, .010f, w, h)
+    DecorLine(.62f, .115f, .34f, .010f, w, h)
+    DecorLine(.025f, .33f, .010f, .52f, w, h)
+    DecorLine(.955f, .33f, .010f, .52f, w, h)
+    DecorLabel("ВХОД", .245f, .095f, w, h)
+    DecorLabel("ВХОД", .18f, .79f, w, h)
+    DecorLine(.27f, .91f, .66f, .032f, w, h)
+    DecorPlant(.015f, .17f, w, h)
+    DecorPlant(.90f, .18f, w, h)
+    DecorPlant(.05f, .83f, w, h)
+    DecorPlant(.90f, .83f, w, h)
+}
+
+@Composable
+private fun DecorBlock(label: String, x: Float, y: Float, width: Float, height: Float, w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    Box(
+        Modifier
+            .offset(w * x, h * y)
+            .width(w * width)
+            .height(h * height)
+            .background(Color(0xFF201D19), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF75552C), RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = Color(0xFFE5C17A), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun DecorLabel(label: String, x: Float, y: Float, w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    Text(
+        label,
+        color = Color(0xFFE5C17A),
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.offset(w * x, h * y)
+    )
+}
+
+@Composable
+private fun DecorLine(x: Float, y: Float, width: Float, height: Float, w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    Box(
+        Modifier
+            .offset(w * x, h * y)
+            .width(w * width)
+            .height(h * height)
+            .background(Color(0xFF5B4428), RoundedCornerShape(4.dp))
+    )
+}
+
+@Composable
+private fun DecorDiamond(label: String, x: Float, y: Float, width: Float, height: Float, w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    Box(
+        Modifier
+            .offset(w * x, h * y)
+            .width(w * width)
+            .height(h * height)
+            .graphicsLayer { rotationZ = 45f }
+            .background(Color(0xFF201D19), RoundedCornerShape(5.dp))
+            .border(1.dp, Color(0xFF75552C), RoundedCornerShape(5.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = Color(0xFFE5C17A),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.graphicsLayer { rotationZ = -45f }
         )
+    }
+}
+
+@Composable
+private fun DecorPlant(x: Float, y: Float, w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp) {
+    Box(
+        Modifier
+            .offset(w * x, h * y)
+            .size(22.dp)
+            .background(Color(0xFF26321F), CircleShape)
+            .border(1.dp, Color(0xFF6C8048), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("✦", color = Color(0xFF93A861), style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -389,68 +541,110 @@ private fun ActiveTablesPanel(state: ServiceState, now: Long, onOpen: (Int) -> U
 }
 
 @Composable
-private fun TableDialog(
+private fun ActiveTablePanel(
     physical: Int,
     displayNumber: Int,
-    session: TableSession?,
-    shiftOpen: Boolean,
+    session: TableSession,
     now: Long,
     state: ServiceState,
-    onDismiss: () -> Unit
+    onClosePanel: () -> Unit,
+    onMoved: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var newType by remember(physical) { mutableStateOf("Классическая") }
-    var showMove by remember { mutableStateOf(false) }
-    var showRename by remember { mutableStateOf(false) }
-    var renameText by remember { mutableStateOf(displayNumber.toString()) }
+    var showMove by remember(physical) { mutableStateOf(false) }
+    var showRename by remember(physical) { mutableStateOf(false) }
+    var renameText by remember(physical, displayNumber) { mutableStateOf(displayNumber.toString()) }
+    var renameError by remember(physical) { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Стол $displayNumber") },
-        text = {
-            Column(Modifier.widthIn(min = 540.dp, max = 700.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (session == null) {
-                    Text(if (shiftOpen) "Стол свободен" else "Сначала открой смену")
-                    TypeSelector(newType) { newType = it }
-                } else {
-                    session.hookahs.forEachIndexed { index, hookah ->
-                        HookahCard(
-                            index = index,
-                            hookah = hookah,
-                            now = now,
-                            onDeliver = { state.deliver(physical, index) },
-                            onCoal = { state.changeCoal(physical, index) },
-                            onRemove = { state.removeHookah(physical, index) }
-                        )
-                    }
-                    Divider()
+    Card(
+        modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF171613)),
+        border = BorderStroke(1.dp, Color(0xFF4A3924))
+    ) {
+        Column(Modifier.fillMaxSize().padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Стол $displayNumber", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        tableStatus(session, now),
+                        color = if (session.hookahs.any { isDue(it, now) }) Color(0xFFE05B5B) else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                IconButton(onClick = onClosePanel) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Закрыть панель")
+                }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color(0xFF4A3924))
+
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(session.hookahs) { index, hookah ->
+                    HookahCard(
+                        index = index,
+                        hookah = hookah,
+                        now = now,
+                        onDeliver = { state.deliver(physical, index) },
+                        onCoal = { state.changeCoal(physical, index) },
+                        onRemove = {
+                            state.removeHookah(physical, index)
+                            if (session.hookahs.size == 1) onClosePanel()
+                        }
+                    )
+                }
+
+                item {
+                    HorizontalDivider(color = Color(0xFF4A3924))
+                    Spacer(Modifier.height(8.dp))
                     Text("Добавить кальян", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
                     TypeSelector(newType) { newType = it }
+                    Spacer(Modifier.height(8.dp))
                     Button(onClick = { state.addHookah(physical, newType) }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Outlined.Add, null)
                         Spacer(Modifier.width(6.dp))
                         Text("Добавить $newType")
                     }
+                }
+
+                item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { showMove = true }, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Outlined.SwapHoriz, null); Spacer(Modifier.width(6.dp)); Text("Сменить стол")
+                            Icon(Icons.Outlined.SwapHoriz, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Сменить стол")
                         }
-                        OutlinedButton(onClick = { showRename = true }, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Outlined.Tag, null); Spacer(Modifier.width(6.dp)); Text("Номер стола")
+                        OutlinedButton(onClick = {
+                            renameText = displayNumber.toString()
+                            renameError = null
+                            showRename = true
+                        }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.Tag, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Номер")
                         }
                     }
-                    OutlinedButton(onClick = { state.closeTable(physical); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text("Закрыть стол") }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            state.closeTable(physical)
+                            onClosePanel()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE58B83))
+                    ) {
+                        Text("Закрыть стол")
+                    }
                 }
             }
-        },
-        confirmButton = {
-            if (session == null) {
-                Button(enabled = shiftOpen, onClick = { state.openTable(physical, newType) }) { Text("Открыть стол") }
-            } else TextButton(onClick = onDismiss) { Text("Готово") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
-    )
+        }
+    }
 
-    if (showMove && session != null) {
+    if (showMove) {
         val free = allTables.filter { !state.sessions.containsKey(it.physical) }
         AlertDialog(
             onDismissRequest = { showMove = false },
@@ -458,11 +652,15 @@ private fun TableDialog(
             text = {
                 LazyColumn(Modifier.heightIn(max = 360.dp)) {
                     items(free) { table ->
-                        TextButton(onClick = {
-                            state.moveTable(physical, table.physical)
-                            showMove = false
-                            onDismiss()
-                        }, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            onClick = {
+                                if (state.moveTable(physical, table.physical)) {
+                                    showMove = false
+                                    onMoved(table.physical)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text("Стол ${state.displayNumber(table.physical)} • ${table.zone}", modifier = Modifier.fillMaxWidth())
                         }
                     }
@@ -478,17 +676,60 @@ private fun TableDialog(
             onDismissRequest = { showRename = false },
             title = { Text("Изменить номер стола") },
             text = {
-                OutlinedTextField(value = renameText, onValueChange = { renameText = it.filter(Char::isDigit).take(4) }, label = { Text("Новый номер") })
+                Column {
+                    OutlinedTextField(
+                        value = renameText,
+                        onValueChange = {
+                            renameText = it.filter(Char::isDigit).take(4)
+                            renameError = null
+                        },
+                        label = { Text("Новый номер") },
+                        isError = renameError != null
+                    )
+                    renameError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
             },
             confirmButton = {
                 Button(onClick = {
-                    renameText.toIntOrNull()?.let { state.renameTable(physical, it) }
-                    showRename = false
+                    val number = renameText.toIntOrNull()
+                    when {
+                        number == null -> renameError = "Введите номер стола"
+                        state.renameTable(physical, number) -> showRename = false
+                        else -> renameError = "Этот номер уже используется"
+                    }
                 }) { Text("Сохранить") }
             },
             dismissButton = { TextButton(onClick = { showRename = false }) { Text("Отмена") } }
         )
     }
+}
+
+@Composable
+private fun FreeTableDialog(
+    physical: Int,
+    displayNumber: Int,
+    shiftOpen: Boolean,
+    state: ServiceState,
+    onDismiss: () -> Unit
+) {
+    var newType by remember(physical) { mutableStateOf("Классическая") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Стол $displayNumber") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(if (shiftOpen) "Стол свободен" else "Сначала открой смену")
+                TypeSelector(newType) { newType = it }
+            }
+        },
+        confirmButton = {
+            Button(enabled = shiftOpen, onClick = { state.openTable(physical, newType) }) {
+                Text("Открыть стол")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }
 
 @Composable
